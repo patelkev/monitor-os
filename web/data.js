@@ -67,6 +67,8 @@ var Prefs = (function () {
      * 'current' (the one on screen) or 'clock' (the clock on black). */
     saverAfter: function () { return pick('saverAfter', '5'); },
     saverShows: function () { return pick('saverShows', 'walls'); },
+    /** How long each screensaver photo stays, in seconds: '10', '30', '60', '300', '900' or '3600'. */
+    saverEvery: function () { return pick('saverEvery', '60'); },
     /** The screensaver's other choices (Home Settings > Screensaver): saverWall, saverClock, saverSecs, saverDate,
      * saverWeather, saverHourly, saverQuotes, saverName (on or off) and saverPos ('move', 'left', 'right', 'center'). */
     saver: function (name) {

@@ -88,7 +88,7 @@ All in `web/` (the Samsung/LG web app), plus `tools/webapp.py` (packs `web/wallp
 | Rotation | Never / each time Home opens / every 5, 15, 60 min of Home on screen | `checkRotation`, `rotateWall` |
 | Dock or List | Apps along the bottom, or a column on the right with icon and name | `renderList`, `move()` |
 | Font | Inter, Manrope, Geist or Newsreader (all OFL) | `applyFont`, `web/typefaces/` |
-| Screensaver | Its own Home Settings page (and drawer key): start after, wallpaper on/off, photos, clock, seconds, date, weather now, hourly forecast, crypto, photo name, position (moving round the corners against burn-in), preview. One glass card | `saverRows`, `fillSaverCard`, `showSaver` |
+| Screensaver | Its own Home Settings page (and drawer key): start after, wallpaper on/off, photos, change every (10 s–1 h), clock, seconds, date, weather now, hourly forecast, crypto, photo name, position (moving round the corners against burn-in), preview. One glass card | `saverRows`, `fillSaverCard`, `showSaver` |
 
 Settings are kept in the monitor's local storage (`fmtv.prefs`), so they survive app updates but not an uninstall.
 

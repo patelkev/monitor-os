@@ -612,6 +612,10 @@
     updateFocus();
   }
 
+  function saverEveryLabel(secs) {
+    return secs < 60 ? secs + ' s' : secs < 3600 ? secs / 60 + ' min' : secs / 3600 + ' h';
+  }
+
   function saverRows() {
     var after = Prefs.saverAfter(), wall = Prefs.saver('saverWall'), clock = Prefs.saver('saverClock'), pos = Prefs.saver('saverPos');
     function flag(name, label, dim) {
@@ -625,6 +629,9 @@
       {label: tr('Fotos', 'Photos', 'Fotos'), dim: !wall,
         value: Prefs.saverShows() === 'current' ? tr('Este papel de parede', 'This wallpaper', 'Este fondo') : tr('Todos os papéis de parede', 'All wallpapers', 'Todos los fondos'),
         step: function (d) { if (wall) cycle('saverShows', ['walls', 'current'], Prefs.saverShows() === 'current' ? 'current' : 'walls', d); }},
+      {label: tr('Trocar a cada', 'Change every', 'Cambiar cada'), dim: !wall,
+        value: saverEveryLabel(Prefs.saverEvery()),
+        step: function (d) { if (wall) cycle('saverEvery', ['10', '30', '60', '300', '900', '3600'], Prefs.saverEvery(), d); }},
       flag('saverClock', tr('Relógio', 'Clock', 'Reloj')),
       flag('saverSecs', tr('Segundos', 'Seconds', 'Segundos'), !clock),
       flag('saverDate', tr('Data', 'Date', 'Fecha')),
@@ -1311,7 +1318,7 @@
       }
       fillSaverCard(card, shown);
       placeSaverCard(card);
-      saverTimer = setTimeout(next, 12000);
+      saverTimer = setTimeout(next, (+Prefs.saverEvery() || 60) * 1000);
     }
     setClass(s, 'on', true);
     next();
