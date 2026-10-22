@@ -1,5 +1,9 @@
 # Free My TV: notes for Claude
 
+> **This checkout is the `m5-monitor` branch**, adapted to a Samsung M5 Smart Monitor (Tizen 5.5) with extra home
+> screen features (wallpapers, screensaver page, List layout, long-press menu and more). Read `MONITOR.md` first: the
+> device, the Mac setup, build and install commands, what changed where, and how to test with `tools/m5/preview.sh`.
+
 A home screen for Google TV and Android TV that replaces the stock one, plus a settings app that switches between
 Free My TV and the TV's original home screen. A plain Android app in Java, built without Gradle by `build.sh`.
 LG TVs (webOS) and Samsung TVs (Tizen) get the same home screen as a web app: `web/`, packed by `webos/` and `tizen/`

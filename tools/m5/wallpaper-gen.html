@@ -1,0 +1,25 @@
+<html><body><pre id="out"></pre><script>
+var IDS = ['misty','cove','forest','valley','night','peaks','bridge','ridge','golden','summit','goldcoast','sydney','amber','mint','alpine'];
+var out = {}, left = IDS.length;
+IDS.forEach(function (id) {
+  var img = new Image();
+  img.onload = function () {
+    // Text region (title, clock, date) on the 1920x1080 stage: x 60-780, y 30-560. Measured on a 192x108 copy.
+    var c = document.createElement('canvas'); c.width = 192; c.height = 108;
+    var x = c.getContext('2d'); x.drawImage(img, 0, 0, 192, 108);
+    var d = x.getImageData(6, 3, 72, 53).data, sum = 0, sq = 0, n = 0;
+    for (var i = 0; i < d.length; i += 4) {
+      var l = (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255;
+      sum += l; sq += l * l; n++;
+    }
+    var mean = sum / n, sd = Math.sqrt(sq / n - mean * mean);
+    // Blurred copy for the glass: 480x270, drawn a little larger so the blur has no dark edges.
+    var b = document.createElement('canvas'); b.width = 480; b.height = 270;
+    var y = b.getContext('2d'); y.filter = 'blur(9px) saturate(1.1)';
+    y.drawImage(img, -24, -14, 528, 298);
+    out[id] = {mean: +mean.toFixed(3), sd: +sd.toFixed(3), blur: b.toDataURL('image/jpeg', 0.72)};
+    if (--left === 0) document.getElementById('out').textContent = JSON.stringify(out);
+  };
+  img.src = id + '.jpg';
+});
+</script></body></html>

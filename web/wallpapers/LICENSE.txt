@@ -1,0 +1,3 @@
+Wallpapers from CleanFrame (github.com/nthnclrk/CleanFrame), cropped to 16:9 and re-compressed.
+Each photograph is by the photographer named in SOURCES.json and is used under the Unsplash License
+(https://unsplash.com/license). Photographers retain their rights.

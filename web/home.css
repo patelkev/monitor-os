@@ -27,6 +27,14 @@ body {
   cursor: default;
 }
 
+/* The other typefaces for the home screen (Home Settings > Font), from CleanFrame; their licences are in typefaces/. */
+@font-face { font-family: 'Manrope'; src: url('typefaces/Manrope.woff2') format('woff2'); font-weight: 400 700; }
+@font-face { font-family: 'Geist'; src: url('typefaces/Geist-Variable.ttf') format('truetype'); font-weight: 100 900; }
+@font-face { font-family: 'Newsreader'; src: url('typefaces/Newsreader-Variable.ttf') format('truetype'); font-weight: 200 800; }
+.font-manrope #home, .font-manrope #drawer { font-family: 'Manrope', 'Inter', sans-serif; }
+.font-geist #home, .font-geist #drawer { font-family: 'Geist', 'Inter', sans-serif; }
+.font-newsreader #home, .font-newsreader #drawer { font-family: 'Newsreader', Georgia, serif; }
+
 button { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; outline: none; }
 
 #stage {
@@ -59,6 +67,8 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 #sky .night { background: -webkit-linear-gradient(top, #1C1C1E, #0B0B0D); background: linear-gradient(#1C1C1E, #0B0B0D); opacity: 0; }
 #sky canvas { position: absolute; left: -4%; top: -4%; width: 108%; height: 108%; opacity: 0; -webkit-transition: opacity 0.8s; transition: opacity 0.8s; }
 #sky canvas.on { opacity: 1; }
+#sky .wall { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background-size: cover; background-position: center; opacity: 0; -webkit-transition: opacity 1.2s; transition: opacity 1.2s; }
+.has-wall #sky .wall.on { opacity: 1; }
 #sky .veil { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background: rgba(245, 245, 247, 0.74); -webkit-transition: background-color 2s; transition: background-color 2s; }
 #sky .lift { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background: #FFF; opacity: 0; -webkit-transition: opacity 0.45s, background-color 2s; transition: opacity 0.45s, background-color 2s; }
 .night #sky .day { opacity: 0; }
@@ -448,7 +458,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .cell.focus .face { -webkit-transform: scale(1.08); transform: scale(1.08); box-shadow: 0 16px 34px rgba(0, 0, 0, 0.55), inset 0 0 0 2px rgba(255, 255, 255, 0.4); }
 .cell.focus .label { color: #FFF; }
 
-#settings .box, #shelfedit .box {
+#settings .box, #shelfedit .box, #tilemenu .box {
   position: absolute;
   left: 560px;
   top: 150px;
@@ -524,3 +534,131 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 
 /* The Magic Remote's pointer: no text selection, no outlines. */
 * { -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+
+/* MARK: - Focus ring: whatever has focus gets a blue outline with a soft glow, in the day and the night look. */
+
+.tab.focus, .night .tab.focus,
+.round.focus, .night .round.focus,
+.key.focus,
+.cell.focus .face { box-shadow: 0 0 0 4px #0A84FF, 0 0 26px rgba(10, 132, 255, 0.55), 0 14px 30px rgba(0, 0, 0, 0.28); }
+.tile.focus, .night .tile.focus { box-shadow: 0 0 0 4px #0A84FF, 0 0 30px rgba(10, 132, 255, 0.6), 0 18px 40px rgba(0, 0, 0, 0.34); }
+.card.focus .img, .night .card.focus .img { box-shadow: 0 0 0 4px #0A84FF, 0 0 30px rgba(10, 132, 255, 0.55), 0 24px 46px rgba(0, 0, 0, 0.34); }
+/* The settings list clips what's outside it, so its ring is drawn inside the row. */
+.box .row.focus { box-shadow: inset 0 0 0 3px #0A84FF; }
+
+/* Long-press menu: a smaller box than Home Settings. */
+#tilemenu .box { left: 660px; top: 300px; width: 600px; }
+/* Move mode: the app being carried has an amber ring and sits a little higher. */
+.tile.moving, .night .tile.moving {
+  -webkit-transform: translateY(-14px) scale(1.2);
+  transform: translateY(-14px) scale(1.2);
+  box-shadow: 0 0 0 5px #FF9F0A, 0 0 34px rgba(255, 159, 10, 0.65), 0 24px 44px rgba(0, 0, 0, 0.4);
+}
+
+/* MARK: - Wallpaper gallery: a grid like All Apps; the photo in use has a check. */
+
+#walls .grid { position: absolute; left: 0; top: 0; width: 1920px; -webkit-transition: -webkit-transform 0.4s cubic-bezier(0.2, 0.9, 0.3, 1); transition: transform 0.4s cubic-bezier(0.2, 0.9, 0.3, 1); }
+#walls .face { background-size: cover; background-position: center; background-color: #3A3A3C; }
+#walls .none { position: absolute; left: 0; right: 0; top: 62px; text-align: center; font-size: 30px; font-weight: 600; color: rgba(255, 255, 255, 0.8); }
+#walls .cell.on .label { color: #0A84FF; font-weight: 700; }
+/* Text straight on a wallpaper: a darker grey by day and a soft halo, so it reads over a busy photo. */
+.has-wall #title, .has-wall .tab, .has-wall #clock, .has-wall #quotes, .has-wall .row-title { text-shadow: 0 1px 14px rgba(255, 255, 255, 0.75); }
+.has-wall .tab, .has-wall #clock .date, .has-wall #quotes, .has-wall .row-title { color: #3A3A3C; }
+.night.has-wall #title, .night.has-wall .tab, .night.has-wall #clock, .night.has-wall #quotes, .night.has-wall .row-title { text-shadow: 0 1px 14px rgba(0, 0, 0, 0.6); }
+.night.has-wall .tab, .night.has-wall #clock .date, .night.has-wall #quotes, .night.has-wall .row-title { color: rgba(245, 245, 247, 0.8); }
+.has-wall .tab.focus, .night.has-wall .tab.focus { color: #1D1D1F; text-shadow: none; }
+.has-wall .tab.on { color: #1D1D1F; }
+.night.has-wall .tab.on { color: #F5F5F7; }
+#walls { background: rgba(0, 0, 0, 0.86); }
+/* The focused tab is a white plate in both looks: its text stays dark even when it's also the selected tab. */
+.has-wall .tab.on.focus, .night.has-wall .tab.on.focus, .night .tab.on.focus { color: #1D1D1F; text-shadow: none; }
+#tabs { -webkit-transition: opacity 0.3s; transition: opacity 0.3s; }
+.no-tabs #tabs { display: none; }
+
+/* Over a wallpaper: the photo as it is by day; at night a dark veil. Only its colour changes, so switching fades. */
+.has-wall #sky .veil, .night.has-wall #sky .veil { background-image: none; }
+.has-wall #sky .veil { background-color: rgba(11, 11, 13, 0); }
+.night.has-wall #sky .veil { background-color: rgba(11, 11, 13, 0.5); }
+
+/* All Apps: a small tag on apps recently taken off the shelf. */
+.cell .face .tag { position: absolute; left: 10px; top: 10px; padding: 4px 10px; border-radius: 10px; font-size: 18px; font-weight: 600; color: #FFF; background: rgba(10, 132, 255, 0.9); }
+
+/* Text straight on a dark day photo (picked per photo): white, with a dark halo. */
+.ink-light #title, .ink-light .tab, .ink-light #clock { color: #F5F5F7; text-shadow: 0 1px 16px rgba(0, 0, 0, 0.55); }
+.ink-light #clock .date { color: rgba(245, 245, 247, 0.85); }
+/* A busy photo: a wider halo. */
+.has-wall.ink-busy #title, .has-wall.ink-busy #clock { text-shadow: 0 2px 24px rgba(255, 255, 255, 0.9), 0 0 6px rgba(255, 255, 255, 0.5); }
+.ink-light.ink-busy #title, .ink-light.ink-busy #clock, .night.has-wall.ink-busy #title, .night.has-wall.ink-busy #clock { text-shadow: 0 2px 24px rgba(0, 0, 0, 0.7), 0 0 6px rgba(0, 0, 0, 0.4); }
+
+/* MARK: - List layout: the apps in a column on the right, a small icon and the name; hidden while the drawer is open. */
+
+.tile.list { background: none; box-shadow: none; overflow: visible; color: #1D1D1F; border-radius: 20px; }
+.night .tile.list { color: #F5F5F7; }
+.tile.list::after { display: none; }
+.tile.list .mini { position: absolute; left: 10px; top: 10px; width: 114px; height: 64px; border-radius: 14px; overflow: hidden; color: #FFF; }
+.tile.list .mini .word { margin-top: -14px; height: 28px; line-height: 28px; }
+.tile.list .name { position: absolute; left: 146px; right: 20px; top: 0; line-height: 84px; font-size: 32px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile.list.focus, .night .tile.list.focus { background: rgba(255, 255, 255, 0.92); color: #1D1D1F; -webkit-transform: scale(1.04); transform: scale(1.04); }
+.tile.list.moving, .night .tile.list.moving { background: rgba(255, 255, 255, 0.92); color: #1D1D1F; -webkit-transform: translateX(-16px) scale(1.04); transform: translateX(-16px) scale(1.04); }
+.layout-list #tiles, .layout-list #platter { -webkit-transition: opacity 0.3s; transition: opacity 0.3s; }
+.layout-list.drawer-open #tiles, .layout-list.drawer-open #platter { opacity: 0; }
+.tile.list.focus, .night .tile.list.focus { box-shadow: 0 0 0 4px #0A84FF, 0 0 26px rgba(10, 132, 255, 0.55), 0 14px 30px rgba(0, 0, 0, 0.28); }
+.tile.list.moving, .night .tile.list.moving { box-shadow: 0 0 0 5px #FF9F0A, 0 0 30px rgba(255, 159, 10, 0.6), 0 18px 36px rgba(0, 0, 0, 0.35); }
+
+/* A focused frosted key turns into a solid white plate with a dark icon and name, in both looks, like the round buttons
+   at the top right. The frost is an inline background, so the plate needs !important to cover it. */
+.key.glass.focus, .night .key.glass.focus { background-image: none !important; background-color: #FFF !important; color: #1D1D1F; }
+.night .key.glass.focus .label { color: #1D1D1F; }
+
+/* A small tag in the corner of an input key (the monitor's HDMI 1: ARC). */
+.key .badge { position: absolute; right: 10px; top: 10px; padding: 3px 9px; border-radius: 9px; font-size: 17px; font-weight: 700; letter-spacing: 0.04em; color: #FFF; background: #0A84FF; }
+
+/* Screensaver: the clock moves to the other side with each photo. */
+#saver .clock { -webkit-transition: left 1.2s, right 1.2s, opacity 0.6s; transition: left 1.2s, right 1.2s, opacity 0.6s; }
+#saver .clock.right { left: auto; right: 80px; text-align: right; }
+
+/* MARK: - Screensaver card: only what's switched on (Home Settings > Screensaver), in one place or round the corners. */
+
+#saver .clock { top: auto; right: auto; max-width: 1100px; -webkit-transition: opacity 0.6s; transition: opacity 0.6s; }
+#saver .clock.empty { display: none; }
+#saver .clock.spot-bl { left: 80px; bottom: 90px; top: auto; right: auto; text-align: left; }
+#saver .clock.spot-br { left: auto; right: 80px; bottom: 90px; top: auto; text-align: right; }
+#saver .clock.spot-tr { left: auto; right: 80px; top: 80px; bottom: auto; text-align: right; }
+#saver .clock.spot-tl { left: 80px; top: 80px; bottom: auto; right: auto; text-align: left; }
+#saver .clock.spot-c { left: 50%; top: 50%; bottom: auto; right: auto; text-align: center; -webkit-transform: translate(-50%, -50%); transform: translate(-50%, -50%); }
+#saver .clock .wx { margin-top: 20px; font-size: 44px; font-weight: 500; white-space: nowrap; }
+#saver .clock .wx .sym { display: inline-block; position: relative; width: 44px; height: 44px; vertical-align: -6px; margin-right: 14px; }
+#saver .clock .wx .place { margin-left: 18px; font-size: 30px; color: rgba(255, 255, 255, 0.75); }
+#saver .clock .cond { margin-top: 6px; font-size: 26px; font-weight: 500; color: rgba(255, 255, 255, 0.75); white-space: nowrap; }
+#saver .clock .hours { margin-top: 18px; white-space: nowrap; }
+#saver .clock .hour { display: inline-block; width: 96px; text-align: center; font-size: 22px; color: rgba(255, 255, 255, 0.8); }
+#saver .clock .hour .sym { display: block; position: relative; width: 30px; height: 30px; margin: 8px auto; }
+#saver .clock .hour .d { font-size: 26px; font-weight: 600; color: #FFF; }
+#saver .clock .coins { margin-top: 16px; font-size: 26px; font-weight: 500; white-space: nowrap; color: rgba(255, 255, 255, 0.85); }
+#saver .clock .coins .c { margin-right: 26px; }
+#saver .clock .coins svg { width: 24px; height: 24px; vertical-align: -4px; margin-right: 8px; fill: rgba(255, 255, 255, 0.8); }
+/* Without a wallpaper: black, and a quieter card. */
+#saver.plain .clock { background: rgba(255, 255, 255, 0.07); box-shadow: none; color: rgba(255, 255, 255, 0.82); }
+#saver.plain .shade { display: none; }
+/* A darker glass than the home screen's, so white text reads on bright photos too (snow, sky). */
+#saver .clock { background: -webkit-linear-gradient(top, rgba(18, 18, 22, 0.46), rgba(18, 18, 22, 0.32)); background: linear-gradient(rgba(18, 18, 22, 0.46), rgba(18, 18, 22, 0.32)); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.18), inset 0 0 0 1px rgba(255, 255, 255, 0.1); }
+#saver.plain .clock { background: rgba(255, 255, 255, 0.07); box-shadow: none; }
+
+/* Screensaver card, roomier: more padding, air between the groups (time and date · weather · forecast · prices),
+   with a faint line between them, and wider forecast columns. */
+#saver .clock { padding: 46px 60px 50px; border-radius: 54px; }
+#saver .clock .time { font-size: 140px; line-height: 1; }
+#saver .clock .date { margin-top: 16px; font-size: 32px; line-height: 1.25; }
+#saver .clock .wx, #saver .clock .hours, #saver .clock .coins, #saver .clock .title {
+  margin-top: 32px; padding-top: 30px; border-top: 1px solid rgba(255, 255, 255, 0.16);
+}
+#saver .clock .wx:first-child, #saver .clock .hours:first-child, #saver .clock .coins:first-child, #saver .clock .title:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+#saver .clock .wx { font-size: 46px; line-height: 1.1; }
+#saver .clock .wx .place { margin-left: 22px; }
+#saver .clock .cond { margin-top: 12px; font-size: 26px; line-height: 1.3; letter-spacing: 0.01em; }
+#saver .clock .wx + .cond + .hours { margin-top: 30px; }
+#saver .clock .hour { width: 116px; font-size: 22px; line-height: 1.2; }
+#saver .clock .hour .sym { margin: 12px auto; width: 32px; height: 32px; }
+#saver .clock .coins .c { margin-right: 36px; }
+#saver .clock .coins .c:last-child { margin-right: 0; }
+#saver .clock .title { font-size: 24px; letter-spacing: 0.02em; }

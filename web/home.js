@@ -111,7 +111,7 @@
     }
   }
 
-  var apps = [], shelf = [], others = [], inputs = [];
+  var apps = [], shelf = [], others = [], inputs = [], topActions = [];
 
   function pickShelf() {
     var chosen = Prefs.shelf(), out = [];
@@ -128,16 +128,20 @@
       if (!out.length) out = apps.slice(0, MAX_SHELF);
     }
     shelf = out;
-    others = apps.filter(function (x) { return shelf.indexOf(x) < 0; });
+    // All Apps: the recently removed first (newest first), then the rest in their order.
+    var recent = Prefs.recent(), rest = apps.filter(function (x) { return shelf.indexOf(x) < 0; });
+    others = rest.filter(function (x) { return recent.indexOf(x.id) >= 0; })
+        .sort(function (a, b) { return recent.indexOf(a.id) - recent.indexOf(b.id); })
+        .concat(rest.filter(function (x) { return recent.indexOf(x.id) < 0; }));
   }
 
   // MARK: - Focus
 
-  var Z = {TOP: 'top', CARDS: 'cards', SHELF: 'shelf', DRAWER: 'drawer', APPS: 'apps', SETTINGS: 'settings', EDIT: 'edit'};
-  var st = {zone: Z.SHELF, top: 0, tab: 0, card: 0, shelf: 0, drawer: 0, grid: 0, row: 0, edit: 0};
+  var Z = {TOP: 'top', CARDS: 'cards', SHELF: 'shelf', DRAWER: 'drawer', APPS: 'apps', SETTINGS: 'settings', EDIT: 'edit', MENU: 'menu', WALL: 'wall'};
+  var st = {zone: Z.SHELF, top: 0, tab: 0, card: 0, shelf: 0, drawer: 0, grid: 0, row: 0, edit: 0, menu: 0, moving: false, wall: 0};
   var cards = [];
 
-  function sheetOpen() { return st.zone === Z.APPS || st.zone === Z.SETTINGS || st.zone === Z.EDIT; }
+  function sheetOpen() { return st.zone === Z.APPS || st.zone === Z.SETTINGS || st.zone === Z.EDIT || st.zone === Z.MENU || st.zone === Z.WALL; }
 
   function updateFocus() {
     var i, list;
@@ -152,7 +156,10 @@
     list = $('cards').children;
     for (i = 0; i < list.length; i++) setClass(list[i], 'focus', st.zone === Z.CARDS && st.card === i);
     list = $('tiles').children;
-    for (i = 0; i < list.length; i++) setClass(list[i], 'focus', st.zone === Z.SHELF && st.shelf === i);
+    for (i = 0; i < list.length; i++) {
+      setClass(list[i], 'focus', st.zone === Z.SHELF && st.shelf === i);
+      setClass(list[i], 'moving', st.zone === Z.SHELF && st.moving && st.shelf === i);
+    }
     list = document.querySelectorAll('#drawer .key');
     for (i = 0; i < list.length; i++) setClass(list[i], 'focus', st.zone === Z.DRAWER && st.drawer === i);
     list = document.querySelectorAll('#apps .cell');
@@ -161,7 +168,14 @@
     $('apps').lastChild.style.webkitTransform = $('apps').lastChild.style.transform = 'translateY(' + (-first * 239) + 'px)';
     focusRows($('settings'), st.row, st.zone === Z.SETTINGS);
     focusRows($('shelfedit'), st.edit, st.zone === Z.EDIT);
+    focusRows($('tilemenu'), st.menu, st.zone === Z.MENU);
+    list = document.querySelectorAll('#walls .cell');
+    for (i = 0; i < list.length; i++) setClass(list[i], 'focus', st.zone === Z.WALL && st.wall === i);
+    var wr = Math.max(1, Math.ceil(list.length / 5)), wf = Math.max(0, Math.min(wr - 3, Math.floor(st.wall / 5) - 1));
+    $('walls').lastChild.style.webkitTransform = $('walls').lastChild.style.transform = 'translateY(' + (-wf * 239) + 'px)';
+    var drawerWas = hasClass(body, 'drawer-open');
     setClass(body, 'drawer-open', st.zone === Z.DRAWER);
+    if (drawerWas !== hasClass(body, 'drawer-open')) frost();
   }
 
   function focusRows(sheet, index, on) {
@@ -192,8 +206,13 @@
 
   var TAB_KIND = [null, 'movie', 'tv'];
 
+  // Explore, Movies and Shows sort the picks, which need a TMDB key: without one there are no tabs.
+  var TABS = !!CONFIG.tmdbKey;
+  function topStart() { return TABS ? st.tab : 3; }
+
   function renderTop() {
-    $('title').textContent = tr('Para você', 'For You', 'Para ti');
+    setClass(body, 'no-tabs', !TABS);
+    $('title').textContent = TABS ? tr('Para você', 'For You', 'Para ti') : greeting(new Date().getHours());
     var tabs = $('tabs');
     tabs.innerHTML = '';
     var names = [tr('Explorar', 'Explore', 'Explorar'), tr('Filmes', 'Movies', 'Películas'), tr('Séries', 'Shows', 'Series')];
@@ -203,15 +222,22 @@
     }
     var buttons = $('buttons');
     buttons.innerHTML = '';
-    var defs = [['live_tv', tr('TV aberta', 'Live TV', 'TV en vivo')], ['hdmi', tr('Entradas HDMI', 'HDMI Inputs', 'Entradas HDMI')],
-      ['settings', tr('Ajustes', 'Settings', 'Ajustes')]];
-    for (var b = 0; b < 3; b++) {
-      var r = el('button', 'round' + (b === 2 ? ' last' : ''), buttons);
-      r.style.left = (1596 + 88 * b) + 'px';
-      sym(defs[b][0], r);
-      el('div', 'tip', r, defs[b][1]);
+    var night = Data.isNight(Date.now());
+    // [action, symbol, name]; Live TV only where there's a tuner (not on Samsung's Smart Monitors).
+    var defs = [['inputs', 'hdmi', tr('Entradas HDMI', 'HDMI Inputs', 'Entradas HDMI')],
+      ['theme'].concat(night ? ['sunny', tr('Modo claro', 'Light mode', 'Modo claro')] : ['bedtime', tr('Modo escuro', 'Dark mode', 'Modo oscuro')]),
+      ['settings', 'settings', tr('Ajustes', 'Settings', 'Ajustes')]];
+    if (liveTV()) defs.unshift(['live', 'live_tv', tr('TV aberta', 'Live TV', 'TV en vivo')]);
+    topActions = [];
+    for (var b = 0; b < defs.length; b++) {
+      var r = el('button', 'round' + (b === defs.length - 1 ? ' last' : ''), buttons);
+      r.style.left = (1840 - 88 * (defs.length - b) + 20) + 'px';
+      sym(defs[b][1], r);
+      el('div', 'tip', r, defs[b][2]);
       hover(r, Z.TOP, 3 + b);
+      topActions.push(defs[b][0]);
     }
+    if (st.top > 2 + topActions.length) st.top = 2 + topActions.length;
   }
 
   function renderQuotes() {
@@ -276,8 +302,16 @@
     img.src = url;
   }
 
+  /** The title without picks: a greeting for the time of day. */
+  function greeting(h) {
+    if (h >= 5 && h < 12) return tr('Bom dia', 'Good morning', 'Buenos días');
+    if (h >= 12 && h < 18) return tr('Boa tarde', 'Good afternoon', 'Buenas tardes');
+    return tr('Boa noite', 'Good evening', 'Buenas noches');
+  }
+
   function renderClock() {
     var d = new Date(), c = $('clock');
+    if (!TABS) $('title').textContent = greeting(d.getHours());
     c.firstChild.textContent = Data.time(d.getTime());
     try {
       c.lastChild.textContent = d.toLocaleDateString(I18N.locale(), {weekday: 'long', day: 'numeric', month: 'long'});
@@ -288,7 +322,39 @@
 
   // MARK: - Shelf
 
+  function listLayout() { return Prefs.layout() === 'list'; }
+
+  /** List layout: the apps in a column on the right, each a small icon and its name, on a tall glass panel. */
+  function renderList() {
+    var n = shelf.length, rowH = 84, gap = 12, total = n * rowH + Math.max(0, n - 1) * gap;
+    var top = Math.max(230, Math.round((1080 - total) / 2 + 40)), left = 1240;
+    var platter = $('platter');
+    platter.style.display = n ? '' : 'none';
+    platter.style.left = (left - 20) + 'px';
+    platter.style.width = '640px';
+    platter.style.top = (top - 20) + 'px';
+    platter.style.height = (total + 40) + 'px';
+    $('quotes').style.right = '80px';
+    var tiles = $('tiles');
+    tiles.innerHTML = '';
+    for (var i = 0; i < n; i++) {
+      var t = el('div', 'tile list', tiles);
+      t.style.left = left + 'px';
+      t.style.top = (top + i * (rowH + gap)) + 'px';
+      t.style.width = '600px';
+      t.style.height = rowH + 'px';
+      face(shelf[i], el('div', 'mini', t), wordFit(shelf[i].title, 114, 22));
+      el('div', 'name', t, shelf[i].title);
+      hover(t, Z.SHELF, i);
+    }
+    frost();
+    updateFocus();
+  }
+
   function renderShelf() {
+    setClass(body, 'layout-list', listLayout());
+    st.shelf = Math.max(0, Math.min(shelf.length - 1, st.shelf));
+    if (listLayout()) { renderList(); return; }
     var n = shelf.length, gap = 48, pad = 40;
     // 16:9 tiles, as on Android: never taller than 126, and the glass keeps its bottom edge.
     var tw = Math.min(126 * 16 / 9, (1760 - Math.max(0, n - 1) * gap) / Math.max(1, n)), th = tw * 9 / 16;
@@ -312,6 +378,7 @@
       hover(t, Z.SHELF, i);
     }
     st.shelf = Math.min(st.shelf, Math.max(0, n - 1));
+    frost();
   }
 
   // MARK: - Drawer
@@ -324,10 +391,14 @@
     drawerItems = [];
     for (var i = 0; i < inputs.length; i++) {
       var x = inputs[i];
-      drawerItems.push({label: x.label || tr('TV aberta', 'Live TV', 'TV en vivo'), symbol: x.symbol, off: !x.connected, run: launcher(x.id, x.label)});
+      drawerItems.push({label: x.label || tr('TV aberta', 'Live TV', 'TV en vivo'), symbol: x.symbol, off: !x.connected, badge: x.badge, run: launcher(x.id, x.label)});
     }
     drawerInputs = drawerItems.length;
     drawerItems.push({label: tr('Todos os Apps', 'All Apps', 'Todas las apps'), symbol: 'apps', run: openApps});
+    drawerItems.push({label: tr('Papel de parede', 'Wallpaper', 'Fondo'), symbol: 'wallpaper', run: function () {
+      openWalls(hasClass(body, 'night') ? 'night' : 'day', Z.DRAWER);
+    }});
+    drawerItems.push({label: tr('Protetor de tela', 'Screensaver', 'Salvapantallas'), symbol: 'screensaver', run: function () { openSaverSettings(Z.DRAWER); }});
     drawerItems.push({label: tr('Ajustes do Início', 'Home Settings', 'Ajustes de inicio'), symbol: 'settings', run: openSettings});
     drawerItems.push({label: tr('Ajustes da TV', 'TV Settings', 'Ajustes del TV'), symbol: 'tv_settings', run: tvSettings});
     var n = drawerItems.length, gap = 18, groupGap = 56, groups = drawerInputs > 0 && drawerInputs < n ? 2 : 1;
@@ -344,11 +415,13 @@
       key.style.width = tw + 'px';
       sym(item.symbol, key);
       el('div', 'label', key, item.label);
+      if (item.badge) el('div', 'badge', key, item.badge);
       hover(key, Z.DRAWER, k);
       xPos += tw + gap;
     }
     renderPanels();
     updateFocus();
+    frost();
   }
 
   function renderPanels() {
@@ -443,7 +516,9 @@
       var r = Math.floor(i / 5), c = i % 5, cell = el('div', 'cell', grid);
       cell.style.left = (130 + c * 340) + 'px';
       cell.style.top = (196 + r * 239) + 'px';
-      face(others[i], el('div', 'face', cell), wordFit(others[i].title, 300, 34));
+      var f = el('div', 'face', cell);
+      face(others[i], f, wordFit(others[i].title, 300, 34));
+      if (Prefs.recent().indexOf(others[i].id) >= 0) el('div', 'tag', f, tr('Removido há pouco', 'Recently removed', 'Quitada hace poco'));
       el('div', 'label', cell, others[i].title);
       hover(cell, Z.APPS, i);
     }
@@ -461,6 +536,7 @@
     setClass($('apps'), 'open', false);
     setClass($('settings'), 'open', false);
     setClass($('shelfedit'), 'open', false);
+    setClass($('walls'), 'open', false);
     st.zone = Z.SHELF;
     updateFocus();
   }
@@ -477,8 +553,21 @@
         step: function (d) { cycle('temperature', ['auto', 'C', 'F'], unit, d); renderPanels(); }},
       {label: tr('Tema', 'Theme', 'Tema'), value: theme === 'light' ? tr('Claro', 'Light', 'Claro') : theme === 'dark' ? tr('Escuro', 'Dark', 'Oscuro') : auto,
         step: function (d) { cycle('theme', ['auto', 'light', 'dark'], theme, d); checkNight(); }},
+      {label: tr('Disposição', 'Layout', 'Diseño'), value: listLayout() ? tr('Lista', 'List', 'Lista') : tr('Dock', 'Dock', 'Dock'),
+        step: function (d) { cycle('layout', ['dock', 'list'], Prefs.layout(), d); renderShelf(); }},
+      {label: tr('Fonte', 'Font', 'Fuente'), value: FONTS[Prefs.font()] || 'Inter',
+        step: function (d) { cycle('font', ['inter', 'manrope', 'geist', 'newsreader'], Prefs.font(), d); applyFont(); renderShelf(); }},
+      wallRow('day'),
+      wallRow('night'),
+      {label: tr('Trocar papel de parede', 'Change wallpaper', 'Cambiar fondo'), value: rotateName(Prefs.wallRotate()),
+        step: function (d) { cycle('wallRotate', ['off', 'open', '5', '15', '60'], Prefs.wallRotate(), d); activeMs = 0; }},
+      {label: tr('Protetor de tela', 'Screensaver', 'Salvapantallas'), value: '›', saver: true, open: function () { openSaverSettings(Z.SETTINGS); },
+        step: function () {}},
       {label: tr('Widget do clima', 'Weather widget', 'Widget del clima'), toggle: Prefs.weather(),
         step: function () { Prefs.set('weather', !Prefs.weather()); renderPanels(); }},
+      {label: tr('Local do clima', 'Weather location', 'Ubicación del clima'),
+        value: Prefs.location() === 'auto' ? tr('Pela rede', 'From network', 'Por la red') : tr('Fuso horário', 'Time zone', 'Zona horaria'),
+        step: function () { cycle('location', ['auto', 'zone'], Prefs.location(), 1); Data.locationChanged(); renderPanels(); }},
       {label: tr('Widget de cotações', 'Quotes widget', 'Widget de cotizaciones'), toggle: Prefs.quotes(),
         step: function () { Prefs.set('quotes', !Prefs.quotes()); Data.settingsChanged(); }}
     ];
@@ -502,14 +591,65 @@
 
   var rowsNow = [];
 
+  // MARK: - Screensaver settings: their own page of Home Settings (also a shortcut in the drawer)
+
+  var settingsPage = 'main', saverSetFrom = Z.SETTINGS;
+
+  function openSaverSettings(from) {
+    saverSetFrom = from;
+    settingsPage = 'saver';
+    if (from === Z.DRAWER) { st.zone = Z.SETTINGS; setClass($('settings'), 'open', true); }
+    st.row = 0;
+    renderSettings();
+  }
+
+  /** Back from the Screensaver page: to Home Settings on its row, or to the drawer it was opened from. */
+  function closeSaverSettings() {
+    settingsPage = 'main';
+    if (saverSetFrom === Z.DRAWER) { setClass($('settings'), 'open', false); st.zone = Z.DRAWER; updateFocus(); return; }
+    renderSettings();
+    for (var i = 0; i < rowsNow.length; i++) if (rowsNow[i].saver) st.row = i;
+    updateFocus();
+  }
+
+  function saverRows() {
+    var after = Prefs.saverAfter(), wall = Prefs.saver('saverWall'), clock = Prefs.saver('saverClock'), pos = Prefs.saver('saverPos');
+    function flag(name, label, dim) {
+      return {label: label, toggle: Prefs.saver(name), dim: dim, step: function () { if (!dim) Prefs.set(name, !Prefs.saver(name)); }};
+    }
+    var rows = [
+      {label: tr('Começar após', 'Start after', 'Empezar tras'),
+        value: after === 'off' ? tr('Nunca', 'Never', 'Nunca') : after + ' min',
+        step: function (d) { cycle('saverAfter', ['off', '2', '5', '10', '30'], Prefs.saverAfter(), d); }},
+      flag('saverWall', tr('Papel de parede', 'Wallpaper', 'Fondo')),
+      {label: tr('Fotos', 'Photos', 'Fotos'), dim: !wall,
+        value: Prefs.saverShows() === 'current' ? tr('Este papel de parede', 'This wallpaper', 'Este fondo') : tr('Todos os papéis de parede', 'All wallpapers', 'Todos los fondos'),
+        step: function (d) { if (wall) cycle('saverShows', ['walls', 'current'], Prefs.saverShows() === 'current' ? 'current' : 'walls', d); }},
+      flag('saverClock', tr('Relógio', 'Clock', 'Reloj')),
+      flag('saverSecs', tr('Segundos', 'Seconds', 'Segundos'), !clock),
+      flag('saverDate', tr('Data', 'Date', 'Fecha')),
+      flag('saverWeather', tr('Clima agora', 'Weather now', 'Clima ahora')),
+      flag('saverHourly', tr('Previsão por hora', 'Hourly forecast', 'Pronóstico por hora')),
+      flag('saverQuotes', tr('Cotações', 'Crypto prices', 'Cotizaciones')),
+      flag('saverName', tr('Nome da foto', 'Photo name', 'Nombre de la foto'), !wall),
+      {label: tr('Posição', 'Position', 'Posición'),
+        value: pos === 'left' ? tr('Embaixo à esquerda', 'Bottom left', 'Abajo a la izquierda') : pos === 'right' ? tr('Embaixo à direita', 'Bottom right', 'Abajo a la derecha')
+          : pos === 'center' ? tr('Centro', 'Center', 'Centro') : tr('Em movimento', 'Moving', 'En movimiento'),
+        step: function (d) { cycle('saverPos', ['move', 'left', 'right', 'center'], pos, d); }},
+      {label: tr('Ver agora', 'Preview', 'Ver ahora'), value: '›', step: function (d) { if (d >= 0) { closeSheets(); showSaver(); } }}
+    ];
+    return rows;
+  }
+
   function renderSettings() {
     var box = $('settings').firstChild;
     box.innerHTML = '';
     var title = el('div', 'title', box);
     sym('settings', title);
-    title.appendChild(document.createTextNode(tr('Ajustes do Início', 'Home Settings', 'Ajustes de inicio')));
+    title.appendChild(document.createTextNode(settingsPage === 'saver' ? tr('Protetor de tela', 'Screensaver', 'Salvapantallas')
+        : tr('Ajustes do Início', 'Home Settings', 'Ajustes de inicio')));
     var list = el('div', 'list', box), holder = el('div', 'rows', list);
-    rowsNow = settingRows();
+    rowsNow = settingsPage === 'saver' ? saverRows() : settingRows();
     list.style.height = Math.min(rowsNow.length, 7) * 78 + 'px';
     for (var i = 0; i < rowsNow.length; i++) {
       var r = rowsNow[i], row = el('div', 'row' + (r.dim ? ' dim' : ''), holder, r.label);
@@ -526,6 +666,7 @@
   }
 
   function openSettings() {
+    settingsPage = 'main';
     st.zone = Z.SETTINGS;
     st.row = 0;
     renderSettings();
@@ -592,12 +733,137 @@
       ids.splice(at, 1);
       ids.splice(to, 0, app.id);
     }
-    Prefs.set('shelf', ids);
-    pickShelf();
-    renderShelf();
+    saveShelf(ids);
     var again = editList();
     for (var i = 0; i < again.rows.length; i++) if (again.rows[i].id === app.id) st.edit = i;
     renderShelfEdit();
+  }
+
+  // MARK: - Long press on an app: open, move, take off or put on the shelf
+
+  var menuRows = [], menuFrom = Z.SHELF;
+
+  function shelfIds() { return shelf.map(function (a) { return a.id; }); }
+
+  // Every shelf change in this session can be undone, one at a time.
+  var shelfHistory = [], movedFrom = null;
+
+  function saveShelf(ids) {
+    var before = shelfIds();
+    shelfHistory.push(before);
+    if (shelfHistory.length > 20) shelfHistory.shift();
+    // Apps taken off go to the front of "recently removed"; apps put back leave it.
+    var recent = Prefs.recent().filter(function (id) { return ids.indexOf(id) < 0; });
+    for (var i = before.length - 1; i >= 0; i--) {
+      if (ids.indexOf(before[i]) < 0) { recent = recent.filter(function (id) { return id !== before[i]; }); recent.unshift(before[i]); }
+    }
+    Prefs.set('recent', recent.slice(0, 6));
+    Prefs.set('shelf', ids);
+    pickShelf();
+    renderShelf();
+  }
+
+  function undoShelf() {
+    var ids = shelfHistory.pop();
+    if (!ids) return;
+    saveShelf(ids);
+    shelfHistory.pop();   // undoing isn't itself a change to undo
+    st.shelf = Math.max(0, Math.min(shelf.length - 1, st.shelf));
+    if (st.zone === Z.APPS) renderApps();
+    toast(tr('Desfeito', 'Undone', 'Deshecho'));
+    updateFocus();
+  }
+
+  /** A small menu over everything: a title and rows, each {label, run}; Back closes it. */
+  function showMenu(title, rows) {
+    menuFrom = st.zone;
+    menuRows = rows;
+    var box = $('tilemenu').firstChild;
+    box.innerHTML = '';
+    el('div', 'title', box, title);
+    var list = el('div', 'list', box), holder = el('div', 'rows', list);
+    list.style.height = menuRows.length * 78 + 'px';
+    for (var i = 0; i < menuRows.length; i++) hover(el('div', 'row', holder, menuRows[i].label), Z.MENU, i);
+    st.zone = Z.MENU;
+    st.menu = 0;
+    setClass($('tilemenu'), 'open', true);
+    updateFocus();
+  }
+
+  /** Back on the shelf: stay, or go to Samsung's home screen. */
+  function askLeave() {
+    showMenu(tr('Sair do Free My TV?', 'Leave Free My TV?', '¿Salir de Free My TV?'), [
+      {label: tr('Ficar aqui', 'Stay here', 'Quedarme aquí'), run: closeMenu},
+      {label: tr('Abrir o Início da Samsung', 'Open Samsung Home', 'Abrir el inicio de Samsung'), run: function () { closeMenu(); TV.back(); }}
+    ]);
+  }
+
+  /** The menu for the focused app: on the shelf, or in All Apps. */
+  function openMenu() {
+    var onShelf = st.zone === Z.SHELF, app = onShelf ? shelf[st.shelf] : others[st.grid];
+    if (!app) return;
+    var rows = [{label: tr('Abrir', 'Open', 'Abrir'), run: function () { closeMenu(); launcher(app.id, app.title)(); }}];
+    if (onShelf) {
+      if (shelf.length > 1) rows.push({label: tr('Mover', 'Move', 'Mover'), run: function () { closeMenu(); startMoving(); }});
+      rows.push({label: tr('Tirar da prateleira', 'Remove from shelf', 'Quitar del estante'), run: function () {
+        var ids = shelfIds();
+        ids.splice(ids.indexOf(app.id), 1);
+        closeMenu();
+        saveShelf(ids);
+        st.shelf = Math.max(0, Math.min(shelf.length - 1, st.shelf));
+        updateFocus();
+      }});
+    } else {
+      rows.push({label: tr('Pôr na prateleira', 'Add to shelf', 'Poner en el estante'), run: function () {
+        var ids = shelfIds();
+        if (ids.length >= MAX_SHELF) {
+          toast(tr('A prateleira cabe até ' + MAX_SHELF + ' apps.', 'The shelf holds up to ' + MAX_SHELF + ' apps.', 'El estante tiene hasta ' + MAX_SHELF + ' apps.'));
+          return;
+        }
+        ids.push(app.id);
+        closeMenu();
+        saveShelf(ids);
+        renderApps();
+        st.grid = Math.max(0, Math.min(others.length - 1, st.grid));
+        updateFocus();
+      }});
+    }
+    if (shelfHistory.length) rows.push({label: tr('Desfazer última mudança', 'Undo last change', 'Deshacer el último cambio'), run: function () { closeMenu(); undoShelf(); }});
+    rows.push({label: tr('Cancelar', 'Cancel', 'Cancelar'), run: closeMenu});
+    showMenu(app.title, rows);
+  }
+
+  function closeMenu() {
+    setClass($('tilemenu'), 'open', false);
+    st.zone = menuFrom;
+    updateFocus();
+  }
+
+  /** Move mode: ← → carry the focused app along the shelf; OK or Back puts it down. */
+  function startMoving() {
+    st.moving = true;
+    movedFrom = shelfIds();   // the whole move is one change to undo, once something moves
+    toast(listLayout() ? tr('↑ ↓ para mover · OK quando terminar', '↑ ↓ to move it · OK when done', '↑ ↓ para moverla · OK al terminar')
+        : tr('← → para mover · OK quando terminar', '← → to move it · OK when done', '← → para moverla · OK al terminar'));
+    updateFocus();
+  }
+
+  function stopMoving() {
+    st.moving = false;
+    setClass($('toast'), 'on', false);
+    updateFocus();
+  }
+
+  function moveTile(dx) {
+    var ids = shelfIds(), to = st.shelf + dx;
+    if (to < 0 || to >= ids.length) return;
+    var id = ids.splice(st.shelf, 1)[0];
+    ids.splice(to, 0, id);
+    st.shelf = to;
+    saveShelf(ids);
+    shelfHistory.pop();
+    if (movedFrom) { shelfHistory.push(movedFrom); movedFrom = null; }
+    updateFocus();
   }
 
   // MARK: - Opening things
@@ -624,16 +890,18 @@
   function activate() {
     switch (st.zone) {
       case Z.TOP:
-        if (st.top < 3) return;
-        if (st.top === 3) { var live = liveTV(); if (live) launcher(live.id, tr('TV aberta', 'Live TV', 'TV en vivo'))(); }
-        else if (st.top === 4) { st.zone = Z.SHELF; openDrawer(); st.drawer = 1 < drawerInputs ? 1 : 0; updateFocus(); }
-        else openSettings();
+        var action = topActions[st.top - 3];
+        if (action === 'live') { var live = liveTV(); if (live) launcher(live.id, tr('TV aberta', 'Live TV', 'TV en vivo'))(); }
+        else if (action === 'inputs') { st.zone = Z.SHELF; openDrawer(); st.drawer = liveTV() && 1 < drawerInputs ? 1 : 0; updateFocus(); }
+        else if (action === 'theme') toggleTheme();
+        else if (action === 'settings') openSettings();
         return;
       case Z.CARDS:
         var p = cards[st.card], app = p && Data.appFor(p.app);
         if (app) launcher(app.id, app.title)();
         return;
       case Z.SHELF:
+        if (st.moving) { stopMoving(); return; }
         if (shelf[st.shelf]) launcher(shelf[st.shelf].id, shelf[st.shelf].title)();
         return;
       case Z.DRAWER:
@@ -643,10 +911,18 @@
         if (others[st.grid]) launcher(others[st.grid].id, others[st.grid].title)();
         return;
       case Z.SETTINGS:
-        if (rowsNow[st.row]) { rowsNow[st.row].step(1); if (st.zone === Z.SETTINGS) renderSettings(); }
+        var row = rowsNow[st.row];
+        if (row && row.open) { row.open(); return; }
+        if (row) { row.step(1); if (st.zone === Z.SETTINGS) renderSettings(); }
+        return;
+      case Z.WALL:
+        pickWall();
         return;
       case Z.EDIT:
         editShelf(0);
+        return;
+      case Z.MENU:
+        if (menuRows[st.menu]) menuRows[st.menu].run();
         return;
     }
   }
@@ -661,21 +937,30 @@
     var tiles = $('tiles').children, cardNodes = $('cards').children;
     switch (st.zone) {
       case Z.SHELF:
+        if (listLayout()) {
+          // The list: ↑ ↓ through the apps; past the first, the buttons at the top; past the last, the drawer.
+          if (st.moving) { if (dy) moveTile(dy); return; }
+          if (dy < 0 && st.shelf === 0) { st.zone = Z.TOP; st.top = topStart(); }
+          else if (dy > 0 && st.shelf >= shelf.length - 1) { openDrawer(); return; }
+          else if (dy) st.shelf += dy;
+          break;
+        }
+        if (st.moving) { if (dx) moveTile(dx); return; }
         if (dx) st.shelf = Math.max(0, Math.min(shelf.length - 1, st.shelf + dx));
         else if (dy > 0) { openDrawer(); return; }
         else if (dy < 0) {
           if (cards.length) { st.zone = Z.CARDS; st.card = nearest(cardNodes, centerX(tiles[st.shelf])); }
-          else { st.zone = Z.TOP; st.top = st.tab; }
+          else { st.zone = Z.TOP; st.top = topStart(); }
         }
         break;
       case Z.CARDS:
         if (dx) st.card = Math.max(0, Math.min(cards.length - 1, st.card + dx));
-        else if (dy < 0) { st.zone = Z.TOP; st.top = st.tab; }
+        else if (dy < 0) { st.zone = Z.TOP; st.top = topStart(); }
         else if (shelf.length) { st.zone = Z.SHELF; st.shelf = nearest(tiles, centerX(cardNodes[st.card])); }
         break;
       case Z.TOP:
         if (dx) {
-          st.top = Math.max(0, Math.min(5, st.top + dx));
+          st.top = Math.max(TABS ? 0 : 3, Math.min(2 + topActions.length, st.top + dx));
           if (st.top < 3) selectTab(st.top);   // as on Apple TV: focusing a tab selects it
         } else if (dy > 0) {
           if (cards.length) { st.zone = Z.CARDS; st.card = Math.min(cards.length - 1, st.top < 3 ? 0 : cards.length - 1); }
@@ -697,6 +982,13 @@
           if (r.value !== '›') { r.step(dx); renderSettings(); }
         }
         break;
+      case Z.MENU:
+        if (dy) st.menu = Math.max(0, Math.min(menuRows.length - 1, st.menu + dy));
+        break;
+      case Z.WALL:
+        var w = st.wall + dx + dy * 5;
+        if (w >= 0 && w < wallChoices.length && (dx === 0 || Math.floor(w / 5) === Math.floor(st.wall / 5))) st.wall = w;
+        break;
       case Z.EDIT:
         if (dy) st.edit = Math.max(0, Math.min(apps.length - 1, st.edit + dy));
         else if (dx) editShelf(dx);
@@ -706,17 +998,21 @@
   }
 
   function back() {
+    if (st.moving) { stopMoving(); return; }
+    if (st.zone === Z.MENU) { closeMenu(); return; }
+    if (st.zone === Z.WALL) { closeWalls(); return; }
+    if (st.zone === Z.SETTINGS && settingsPage === 'saver') { closeSaverSettings(); return; }
     if (st.zone === Z.EDIT) { setClass($('shelfedit'), 'open', false); openSettings(); st.row = rowsNow.length - 2; updateFocus(); return; }
     if (sheetOpen()) { closeSheets(); return; }
     if (st.zone === Z.DRAWER) { closeDrawer(); return; }
     if (st.zone !== Z.SHELF && shelf.length) { st.zone = Z.SHELF; updateFocus(); return; }
-    TV.back();
+    askLeave();
   }
 
   /** The pointer focuses what it's over (the Magic Remote, or a mouse when previewing). */
   function hover(node, zone, index) {
     node.onmouseover = function () {
-      if (saverOn || (sheetOpen() !== (zone === Z.APPS || zone === Z.SETTINGS || zone === Z.EDIT))) return;
+      if (saverOn || (sheetOpen() !== (zone === Z.APPS || zone === Z.SETTINGS || zone === Z.EDIT || zone === Z.MENU || zone === Z.WALL))) return;
       if (zone === Z.DRAWER && st.zone !== Z.DRAWER) return;
       if (zone !== Z.DRAWER && st.zone === Z.DRAWER && zone !== Z.SHELF) return;
       if (zone === Z.SHELF && st.zone === Z.DRAWER) closeDrawer();
@@ -728,6 +1024,8 @@
       else if (zone === Z.APPS) st.grid = index;
       else if (zone === Z.SETTINGS) st.row = index;
       else if (zone === Z.EDIT) st.edit = index;
+      else if (zone === Z.MENU) st.menu = index;
+      else if (zone === Z.WALL) st.wall = index;
       updateFocus();
     };
     node.onclick = function () { node.onmouseover(); activate(); };
@@ -744,34 +1042,266 @@
     toastTimer = setTimeout(function () { setClass(t, 'on', false); }, 6000);
   }
 
+  // MARK: - Wallpapers: a photo for the day look and one for the night look (web/wallpapers, from CleanFrame)
+
+  // [id, name, bright]: bright photos suit the day look, the others the night look.
+  // [id, name, bright, light, busy]: bright photos suit the day look, the others the night look. light and busy are the
+  // brightness (0-1) and its spread behind the title and the clock, measured once from the photo: they pick the text colour.
+  var WALLS = [
+    ['misty', 'Misty coast', true, 0.329, 0.144], ['peaks', 'Blue peaks', true, 0.575, 0.179], ['bridge', 'Bridge at dusk', true, 0.453, 0.166],
+    ['ridge', 'Sunlit ridges', true, 0.473, 0.187], ['golden', 'Golden hour', true, 0.51, 0.168], ['goldcoast', 'Gold Coast dusk', true, 0.594, 0.074],
+    ['sydney', 'Sydney Harbour', true, 0.666, 0.242], ['amber', 'Amber hills', true, 0.612, 0.018], ['mint', 'Mint wave', true, 0.754, 0.099],
+    ['night', 'Desert stars', false, 0.249, 0.039], ['summit', 'Sunlit summits', false, 0.195, 0.091], ['forest', 'Forest mist', false, 0.539, 0.144],
+    ['cove', 'Quiet cove', false, 0.281, 0.168], ['valley', 'Mountain valley', false, 0.405, 0.164], ['alpine', 'Alpine glow', false, 0.774, 0.076]
+  ];
+  var wallFor = 'day', wallFrom = Z.SETTINGS, wallChoices = [];
+
+  function wallInfo(id) {
+    for (var i = 0; i < WALLS.length; i++) if (WALLS[i][0] === id) return WALLS[i];
+    return null;
+  }
+
+  function wallId(which) { return which === 'night' ? Prefs.wallNight() : Prefs.wallDay(); }
+  function wallName(id) {
+    for (var i = 0; i < WALLS.length; i++) if (WALLS[i][0] === id) return WALLS[i][1];
+    return tr('Nenhum', 'None', 'Ninguno');
+  }
+  function wallLabel(which) {
+    return which === 'night' ? tr('Papel de parede (noite)', 'Night wallpaper', 'Fondo (noche)') : tr('Papel de parede (dia)', 'Day wallpaper', 'Fondo (día)');
+  }
+
+  /** Shows the wallpaper of the look on screen, or the plain background: the new photo fades in over the old one. */
+  var wallShown = '';
+  function applyWall() {
+    var id = wallId(hasClass(body, 'night') ? 'night' : 'day'), walls = $('sky').querySelectorAll('.wall');
+    if (id && id !== wallShown) {
+      var next = hasClass(walls[0], 'on') ? walls[1] : walls[0], prev = next === walls[0] ? walls[1] : walls[0];
+      next.style.backgroundImage = 'url(wallpapers/' + id + '.jpg)';
+      setClass(next, 'on', true);
+      setClass(prev, 'on', false);
+    }
+    wallShown = id;
+    setClass(body, 'has-wall', !!id);
+    // By day the text takes the colour that reads on this photo: white on a dark one, with a stronger halo when it's busy.
+    // At night the veil darkens every photo, so the text is always white.
+    var info = wallInfo(id), day = !hasClass(body, 'night');
+    setClass(body, 'ink-light', !!(info && day && info[3] < 0.5));
+    setClass(body, 'ink-busy', !!(info && info[4] > 0.15));
+    frost();
+  }
+
+  var FONTS = {inter: 'Inter', manrope: 'Manrope', geist: 'Geist', newsreader: 'Newsreader'};
+  function applyFont() {
+    for (var f in FONTS) if (FONTS.hasOwnProperty(f)) setClass(body, 'font-' + f, f === Prefs.font() && f !== 'inter');
+  }
+
+  // MARK: Rotation: the next photo that suits the look on screen, when Home opens or every few minutes on screen.
+
+  var rotatedAt = Date.now(), activeMs = 0, lastTick = Date.now();
+
+  function rotateName(v) {
+    if (v === 'open') return tr('Ao abrir o Início', 'Each time Home opens', 'Al abrir el inicio');
+    if (v === '60') return tr('A cada hora', 'Every hour', 'Cada hora');
+    if (v !== 'off') return tr('A cada ' + v + ' min', 'Every ' + v + ' min', 'Cada ' + v + ' min');
+    return tr('Nunca', 'Never', 'Nunca');
+  }
+
+  function rotateWall() {
+    var which = hasClass(body, 'night') ? 'night' : 'day', current = wallId(which);
+    if (!current) return;   // a plain background stays plain
+    var suits = WALLS.filter(function (w) { return w[2] === (which === 'day'); }), i = -1;
+    for (var k = 0; k < suits.length; k++) if (suits[k][0] === current) i = k;
+    Prefs.set(which === 'night' ? 'wallNight' : 'wallDay', suits[(i + 1) % suits.length][0]);
+    rotatedAt = Date.now();
+    activeMs = 0;
+    applyWall();
+  }
+
+  /** Every 30 seconds: a timed rotation counts only time with Home on screen and no sheet or screensaver over it. */
+  function checkRotation(opened) {
+    var v = Prefs.wallRotate();
+    if (v === 'open') { if (opened) rotateWall(); return; }
+    var now = Date.now(), step = now - lastTick;
+    lastTick = now;
+    if (v === 'off' || opened) return;
+    if (!(document.hidden || saverOn || sheetOpen())) activeMs += step;
+    if (activeMs >= +v * 60000) rotateWall();
+  }
+
+  /** Frosted glass: the shelf, the drawer's keys and cards show the blurred photo behind them, lined up with it.
+   * The blur is made ahead of time (wallpapers/<id>-blur.jpg), since the TVs' browsers can't blur what's behind. */
+  function frost() {
+    var id = wallShown, night = hasClass(body, 'night'), open = hasClass(body, 'drawer-open');
+    var tint = night ? 'rgba(30, 30, 34, 0.58), rgba(18, 18, 20, 0.5)' : 'rgba(255, 255, 255, 0.66), rgba(255, 255, 255, 0.5)';
+    var list = [$('platter')].concat([].slice.call(document.querySelectorAll('#drawer .glass')));
+    for (var i = 0; i < list.length; i++) {
+      var e = list[i], s = e.style;
+      if (!id) { s.backgroundImage = s.backgroundSize = s.backgroundPosition = ''; continue; }
+      // Where the element is on screen: the shelf rises with the drawer; the drawer's parts are where they are when it's open.
+      var x = e.offsetLeft, y = e.offsetTop - (e.id === 'platter' && open ? 560 : 0);
+      s.backgroundImage = 'linear-gradient(' + tint + '), url(wallpapers/' + id + '-blur.jpg)';
+      s.backgroundSize = '100% 100%, 1920px 1080px';
+      s.backgroundPosition = '0 0, ' + (-x) + 'px ' + (-y) + 'px';
+    }
+  }
+
+  /** A Home Settings row: ← → step through the photos, OK opens the gallery. */
+  function wallRow(which) {
+    return {label: wallLabel(which), value: wallName(wallId(which)), wall: which,
+      open: function () { openWalls(which, Z.SETTINGS); },
+      step: function (d) {
+        var ids = [''].concat(WALLS.map(function (w) { return w[0]; })), i = ids.indexOf(wallId(which));
+        Prefs.set(which === 'night' ? 'wallNight' : 'wallDay', ids[(i + d + ids.length) % ids.length]);
+        applyWall();
+      }};
+  }
+
+  function openWalls(which, from) {
+    wallFor = which;
+    if (from) wallFrom = from;
+    // The photos that suit this look first, then the others, then none.
+    wallChoices = WALLS.filter(function (w) { return w[2] === (which === 'day'); })
+        .concat(WALLS.filter(function (w) { return w[2] !== (which === 'day'); })).concat([['', '', false]]);
+    var sheet = $('walls'), grid = sheet.lastChild, current = wallId(which);
+    sheet.firstChild.textContent = wallLabel(which);
+    grid.innerHTML = '';
+    st.wall = 0;
+    for (var i = 0; i < wallChoices.length; i++) {
+      var w = wallChoices[i], r = Math.floor(i / 5), c = i % 5, cell = el('div', 'cell' + (w[0] === current ? ' on' : ''), grid);
+      cell.style.left = (130 + c * 340) + 'px';
+      cell.style.top = (196 + r * 239) + 'px';
+      var f = el('div', 'face', cell);
+      if (w[0]) f.style.backgroundImage = 'url(wallpapers/' + w[0] + '-thumb.jpg)';
+      else el('div', 'none', f, tr('Nenhum', 'None', 'Ninguno'));
+      el('div', 'label', cell, (w[0] === current ? '✓ ' : '') + (w[0] ? w[1] : tr('Fundo liso', 'Plain background', 'Fondo liso')));
+      hover(cell, Z.WALL, i);
+      if (w[0] === current) st.wall = i;
+    }
+    setClass($('settings'), 'open', false);
+    st.zone = Z.WALL;
+    setClass(sheet, 'open', true);
+    updateFocus();
+  }
+
+  /** OK in the gallery: use the photo and stay, to compare. */
+  function pickWall() {
+    var w = wallChoices[st.wall], keep = st.wall;
+    if (!w) return;
+    Prefs.set(wallFor === 'night' ? 'wallNight' : 'wallDay', w[0]);
+    applyWall();
+    openWalls(wallFor);
+    st.wall = keep;
+    updateFocus();
+  }
+
+  /** Back from the gallery: to the shortcuts it was opened from, or Home Settings on the row it came from. */
+  function closeWalls() {
+    setClass($('walls'), 'open', false);
+    if (wallFrom === Z.DRAWER) { st.zone = Z.DRAWER; updateFocus(); return; }
+    openSettings();
+    for (var i = 0; i < rowsNow.length; i++) if (rowsNow[i].wall === wallFor) st.row = i;
+    updateFocus();
+  }
+
   // MARK: - Night, clock, screensaver
 
   function checkNight() {
-    setClass(body, 'night', Data.isNight(Date.now()));
+    var night = Data.isNight(Date.now());
+    if (night !== hasClass(body, 'night')) { setClass(body, 'night', night); renderTop(); updateFocus(); applyWall(); }
   }
 
-  var saverOn = false, idleAt = Date.now(), saverIndex = 0, saverTimer = 0, SAVER_AFTER = 5 * 60000;
+  /** The sun/moon button: flips to the other look now; Home Settings > Theme brings back Automatic. */
+  function toggleTheme() {
+    Prefs.set('theme', Data.isNight(Date.now()) ? 'light' : 'dark');
+    checkNight();
+  }
+
+  var saverOn = false, idleAt = Date.now(), saverIndex = 0, saverTimer = 0;
+
+  /** What the screensaver shows: the picks when there are any (TMDB), else the wallpapers as set; none when it's off. */
+  function saverPhotos() {
+    if (!Prefs.saver('saverWall')) return [];
+    var picks = Data.showcase().filter(function (p) { return p.backdrop && Data.appFor(p.app); });
+    if (picks.length) return picks.map(function (p) { return {url: Data.image(p.backdrop, 'original'), title: p.title}; });
+    var current = wallId(hasClass(body, 'night') ? 'night' : 'day');
+    var list = Prefs.saverShows() === 'current' ? WALLS.filter(function (w) { return w[0] === current; }) : WALLS.slice();
+    if (!list.length) list = WALLS.slice();
+    // Start from the wallpaper on screen, so the first photo continues what was there.
+    for (var i = 0; i < list.length && list[0][0] !== current && current; i++) list.push(list.shift());
+    return list.map(function (w) { return {url: 'wallpapers/' + w[0] + '.jpg', title: w[1]}; });
+  }
+
+  // Where the card goes: one place, or round the four corners (one step per photo) so nothing stays put on the panel.
+  var SAVER_SPOTS = ['bl', 'br', 'tr', 'tl'], saverSpot = 0, saverTick = 0;
+
+  /** The card: what's switched on in Home Settings > Screensaver, filled in again every tick. */
+  function fillSaverCard(card, photo) {
+    card.innerHTML = '';
+    var d = new Date();
+    if (Prefs.saver('saverClock')) {
+      var t = Data.time(d.getTime()).replace(/ (AM|PM)$/, '');
+      if (Prefs.saver('saverSecs')) { var sec = d.getSeconds(); t += ':' + (sec < 10 ? '0' : '') + sec; }
+      el('div', 'time', card, t);
+    }
+    if (Prefs.saver('saverDate')) {
+      var date;
+      try { date = d.toLocaleDateString(I18N.locale(), {weekday: 'long', day: 'numeric', month: 'long'}); } catch (e) { date = d.toDateString(); }
+      el('div', 'date', card, date);
+    }
+    var w = Data.weather;
+    if (Prefs.saver('saverWeather') && w) {
+      var now = el('div', 'wx', card);
+      sym(Data.symbol(w.code, w.isDay), now);
+      el('span', 'temp', now, Data.degrees(w.temp));
+      el('span', 'place', now, Data.city || '');
+      el('div', 'cond', card, Data.condition(w.code, w.isDay) + '  ·  H:' + Data.degrees(w.max) + '  L:' + Data.degrees(w.min));
+    }
+    if (Prefs.saver('saverHourly') && w && w.hours.length) {
+      var hours = el('div', 'hours', card);
+      for (var i = 0; i < w.hours.length && i < 6; i++) {
+        var h = el('div', 'hour', hours), x = w.hours[i];
+        el('div', 't', h, Data.hour(x.at));
+        sym(Data.symbol(x.code, x.day), h);
+        el('div', 'd', h, Data.degrees(x.temp));
+      }
+    }
+    var coins = Data.activeCoins();
+    if (Prefs.saver('saverQuotes') && coins.length) {
+      var q = el('div', 'coins', card);
+      for (var k = 0; k < coins.length; k++) {
+        var c = el('span', 'c', q);
+        coin(coins[k], c);
+        el('span', '', c, Data.compact(Data.prices[coins[k]]));
+      }
+    }
+    if (Prefs.saver('saverName') && photo) el('div', 'title', card, photo.title);
+    setClass(card, 'empty', !card.children.length);
+  }
+
+  function placeSaverCard(card) {
+    var pos = Prefs.saver('saverPos');
+    var spot = pos === 'left' ? 'bl' : pos === 'right' ? 'br' : pos === 'center' ? 'c' : SAVER_SPOTS[saverSpot++ % SAVER_SPOTS.length];
+    card.className = card.className.replace(/ ?spot-\w+/g, '') + ' spot-' + spot;
+  }
 
   function showSaver() {
-    var photos = Data.showcase().filter(function (p) { return p.backdrop && Data.appFor(p.app); });
+    var photos = saverPhotos();
+    saverIndex = 0;
     saverOn = true;
     var s = $('saver');
     s.innerHTML = '';
+    setClass(s, 'plain', !photos.length);
     var a = el('div', 'photo', s), b = el('div', 'photo', s);
     el('div', 'shade', s);
-    var clock = el('div', 'clock', s);
-    el('div', 'time', clock);
-    el('div', 'date', clock);
-    el('div', 'title', clock);
-    var front = a;
+    var card = el('div', 'clock', s), front = a, shown = null;
     function next() {
       if (!saverOn) return;
       var p = photos.length ? photos[saverIndex++ % photos.length] : null;
       var back = front === a ? b : a;
       if (p) {
-        back.style.backgroundImage = 'url(' + Data.image(p.backdrop, 'original') + ')';
+        shown = p;
+        back.style.backgroundImage = 'url(' + p.url + ')';
         back.style.webkitTransform = back.style.transform = 'scale(1.0)';
-        clock.lastChild.textContent = p.title;
         setTimeout(function () {
           setClass(back, 'on', true);
           setClass(front, 'on', false);
@@ -779,25 +1309,23 @@
           front = back;
         }, 60);
       }
-      tickSaverClock(clock);
+      fillSaverCard(card, shown);
+      placeSaverCard(card);
       saverTimer = setTimeout(next, 12000);
     }
     setClass(s, 'on', true);
     next();
-  }
-
-  function tickSaverClock(clock) {
-    var d = new Date();
-    clock.firstChild.textContent = Data.time(d.getTime()).replace(/ (AM|PM)$/, '');
-    try {
-      clock.children[1].textContent = d.toLocaleDateString(I18N.locale(), {weekday: 'long', day: 'numeric', month: 'long'});
-    } catch (e) {
-      clock.children[1].textContent = d.toDateString();
-    }
+    // The card's clock: every second with seconds on, else every 15 seconds.
+    clearInterval(saverTick);
+    saverTick = setInterval(function () {
+      if (!saverOn) { clearInterval(saverTick); return; }
+      if (Prefs.saver('saverSecs') || new Date().getSeconds() < 15) fillSaverCard(card, shown);
+    }, Prefs.saver('saverSecs') ? 1000 : 15000);
   }
 
   function hideSaver() {
     saverOn = false;
+    clearInterval(saverTick);
     clearTimeout(saverTimer);
     setClass($('saver'), 'on', false);
   }
@@ -810,9 +1338,31 @@
 
   // MARK: - Keys
 
+  // OK on an app waits for the key to come up: a short press opens it, holding it opens its menu.
+  var LONG_PRESS = 600, okTimer = 0, okHeld = false, okLast = 0, okZone = null;
+
+  function holdable() { return (st.zone === Z.SHELF && !st.moving && shelf[st.shelf]) || (st.zone === Z.APPS && others[st.grid]); }
+
   document.addEventListener('keydown', function (e) {
     var k = e.keyCode;
+    if (k === TV.keys.ok && okHeld) {
+      // The remote repeats a held key; a press long after the last one means its keyup got lost.
+      var repeat = e.repeat || Date.now() - okLast < 300;
+      okLast = Date.now();
+      if (repeat) { e.preventDefault(); return; }
+      okHeld = false;
+      clearTimeout(okTimer);
+      okTimer = 0;
+    }
     if (poke()) { e.preventDefault(); return; }   // the first press only wakes the screen
+    if (k === TV.keys.ok && holdable()) {
+      okHeld = true;
+      okLast = Date.now();
+      okZone = st.zone;
+      okTimer = setTimeout(function () { okTimer = 0; if (st.zone === okZone) openMenu(); }, LONG_PRESS);
+      e.preventDefault();
+      return;
+    }
     if (k === TV.keys.left) move(-1, 0);
     else if (k === TV.keys.right) move(1, 0);
     else if (k === TV.keys.up) move(0, -1);
@@ -820,6 +1370,12 @@
     else if (k === TV.keys.ok) activate();
     else if (k === TV.keys.back || k === 27 || k === 8) back();
     else return;
+    e.preventDefault();
+  });
+  document.addEventListener('keyup', function (e) {
+    if (e.keyCode !== TV.keys.ok || !okHeld) return;
+    okHeld = false;
+    if (okTimer) { clearTimeout(okTimer); okTimer = 0; if (st.zone === okZone) activate(); }
     e.preventDefault();
   });
   document.addEventListener('mousemove', function () { poke(); });
@@ -872,6 +1428,7 @@
     // LG: with handlesRelaunch the app has to come to the front itself, or opening it again while it runs shows nothing.
     if (window.PalmSystem && window.PalmSystem.activate) window.PalmSystem.activate();
     reset();
+    Data.reopened();
     loadApps(function () { renderShelf(); renderDrawer(); Data.refresh(); });
   }
 
@@ -881,11 +1438,17 @@
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) { hideSaver(); return; }
     idleAt = Date.now();
+    Data.reopened();
+    checkRotation(true);
     loadApps(function () { renderShelf(); renderDrawer(); updateFocus(); Data.refresh(); });
   });
 
   I18N.set(Prefs.language());
   fit();
+  applyFont();
+  checkNight();
+  applyWall();
+  checkRotation(true);
   renderTop();
   loadApps(function () {
     renderAll();
@@ -894,9 +1457,10 @@
   setInterval(function () {
     renderClock();
     checkNight();
+    checkRotation(false);
     Data.refresh();
-    if (!saverOn && !sheetOpen() && Date.now() - idleAt > SAVER_AFTER) showSaver();
-    if (saverOn) tickSaverClock($('saver').querySelector('.clock'));
+    var after = Prefs.saverAfter();
+    if (after !== 'off' && !saverOn && !sheetOpen() && Date.now() - idleAt > +after * 60000) showSaver();
   }, 30000);
 
   // For the browser preview and tests.

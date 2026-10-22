@@ -239,18 +239,61 @@ var TV = (function () {
     });
   }
 
-  function samsungInputs(done) {
-    var list = [{id: 'source:TV:1', key: 'live', label: null, symbol: 'live_tv', connected: true}];
-    for (var n = 1; n <= 4; n++) list.push({id: 'source:HDMI:' + n, key: 'hdmi' + n, label: 'HDMI ' + n, symbol: 'hdmi', connected: true});
-    samsungSources(function (sources) {
-      if (sources) {
-        for (var i = 1; i < list.length; i++) list[i].connected = false;
-        for (var j = 0; j < sources.length; j++) {
-          var s = sources[j];
-          if (s.type === 'HDMI' && s.number >= 1 && s.number <= 4) list[s.number].connected = true;
-        }
+  /** Whether this is a Samsung Smart Monitor (M5, M7, M8...): no tuner and two HDMI ports. Its model code starts with
+   * "LS" (LS24AM506NNXZA), and its remote control API on port 8001 names the platform "..._MNT". */
+  var monitor = null;
+  function samsungMonitor(done) {
+    if (monitor !== null) { done(monitor); return; }
+    var answered = false;
+    function answer(yes) {
+      if (answered) return;
+      answered = true;
+      if (monitor === null) monitor = yes;
+      done(monitor);
+    }
+    function askApi() {
+      try {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', 'http://127.0.0.1:8001/api/v2/');
+        xhr.timeout = 3000;
+        xhr.onload = function () {
+          var d = {};
+          try { d = JSON.parse(xhr.responseText).device || {}; } catch (e) {}
+          answer(/_MNT$/.test(d.model || '') || /^LS\d/.test(d.modelName || ''));
+        };
+        xhr.onerror = xhr.ontimeout = function () { answer(false); };
+        xhr.send();
+      } catch (e) {
+        answer(false);
       }
-      done(list);
+    }
+    try {
+      window.tizen.systeminfo.getPropertyValue('BUILD', function (b) {
+        if (b && /^LS\d/.test(b.model || '')) answer(true); else askApi();
+      }, askApi);
+    } catch (e) {
+      askApi();
+    }
+  }
+
+  function samsungInputs(done) {
+    samsungMonitor(function (isMonitor) {
+      var list = isMonitor ? [] : [{id: 'source:TV:1', key: 'live', label: null, symbol: 'live_tv', connected: true}];
+      var first = list.length;
+      for (var n = 1; n <= (isMonitor ? 2 : 4); n++) {
+        list.push({id: 'source:HDMI:' + n, key: 'hdmi' + n, label: 'HDMI ' + n, symbol: 'hdmi', connected: true,
+          badge: isMonitor && n === 1 ? 'ARC' : ''});   // the Smart Monitor's HDMI 1 is its audio return (ARC) port
+      }
+      samsungSources(function (sources) {
+        if (sources) {
+          for (var i = first; i < list.length; i++) list[i].connected = false;
+          for (var j = 0; j < sources.length; j++) {
+            var s = sources[j], x = list[first + s.number - 1];
+            if (s.type === 'HDMI' && x) x.connected = true;
+          }
+        }
+        done(list);
+      });
     });
   }
 

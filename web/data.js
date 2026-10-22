@@ -50,6 +50,30 @@ var Prefs = (function () {
     quotes: function () { return pick('quotes', CONFIG.showCrypto !== false); },
     coin: function (i) { var c = pick('coins', null); return c ? c[i] !== false : true; },
     shelf: function () { return pick('shelf', null); },
+    /** Apps recently taken off the shelf, newest first. */
+    recent: function () { return pick('recent', []); },
+    /** Where the weather is for: 'auto' (the network's location) or 'zone' (the TV's time zone, or config.properties). */
+    location: function () { return pick('location', 'auto'); },
+    /** The background photo for the day and the night look ('' for none): an id in web/wallpapers. */
+    wallDay: function () { return pick('wallDay', 'misty'); },
+    wallNight: function () { return pick('wallNight', 'night'); },
+    /** A new wallpaper: 'off', 'open' (each time Home opens) or every 5, 15 or 60 minutes. */
+    wallRotate: function () { return pick('wallRotate', 'off'); },
+    /** The typeface of the home screen: 'inter', 'manrope', 'geist' or 'newsreader'. */
+    font: function () { return pick('font', 'inter'); },
+    /** The apps as a 'dock' along the bottom, or a 'list' with their names on the right. */
+    layout: function () { return pick('layout', 'dock'); },
+    /** The screensaver: after 'off', '2', '5', '10' or '30' idle minutes; showing 'walls' (every wallpaper in turn),
+     * 'current' (the one on screen) or 'clock' (the clock on black). */
+    saverAfter: function () { return pick('saverAfter', '5'); },
+    saverShows: function () { return pick('saverShows', 'walls'); },
+    /** The screensaver's other choices (Home Settings > Screensaver): saverWall, saverClock, saverSecs, saverDate,
+     * saverWeather, saverHourly, saverQuotes, saverName (on or off) and saverPos ('move', 'left', 'right', 'center'). */
+    saver: function (name) {
+      var defaults = {saverWall: true, saverClock: true, saverSecs: false, saverDate: true, saverWeather: true,
+        saverHourly: false, saverQuotes: false, saverName: false, saverPos: 'move'};
+      return pick(name, defaults[name]);
+    },
     set: function (name, value) { v[name] = value; save(); this.version++; },
     setCoin: function (i, on) {
       var c = (pick('coins', null) || [true, true, true, true]).slice();
@@ -89,11 +113,36 @@ var Data = (function () {
 
   // MARK: - Weather
 
-  var PLACE = Place.lat + ',' + Place.lon;
+  // The network's location: the public IP's city (geojs.io, free and without a key), checked again every 3 hours and
+  // whenever the app comes back, so a move to another Wi-Fi brings that city's weather.
+  var geo = stored('geo'), geoAt = 0, fetchingGeo = false;
+
+  function here() {
+    if (Prefs.location() === 'auto' && geo) return {lat: geo.lat, lon: geo.lon, city: geo.city};
+    return {lat: Place.lat, lon: Place.lon, city: Place.city};
+  }
+  function placeKey() { var h = here(); return h.lat + ',' + h.lon; }
+
+  function refreshGeo(force) {
+    var now = Date.now();
+    if (Prefs.location() !== 'auto' || fetchingGeo || (!force && now - geoAt < 3 * 3600000 && now >= geoAt)) return;
+    fetchingGeo = true;
+    get('https://get.geojs.io/v1/ip/geo.json', {}, function (err, o) {
+      fetchingGeo = false;
+      geoAt = Date.now();
+      if (err || !o || !o.latitude || !o.longitude) { refreshWeather(); return; }   // the time zone's city, then
+      var lat = (+o.latitude).toFixed(2), lon = (+o.longitude).toFixed(2);
+      var moved = !geo || geo.lat !== lat || geo.lon !== lon;
+      geo = {lat: lat, lon: lon, city: o.city || o.region || ''};
+      store('geo', geo);
+      if (moved) { weatherAt = 0; refreshWeather(); changed(); }
+    });
+  }
+
   var weather = null, weatherAt = 0, fetchingWeather = false;
   (function () {
     var w = stored('weather');
-    if (w && w.place === PLACE) { weather = parseWeather(w.body); weatherAt = w.at; }
+    if (w && w.place === placeKey()) { weather = parseWeather(w.body); weatherAt = w.at; }
   })();
 
   /** "2026-10-20T18:31" at the location (Open-Meteo's local time) → epoch ms. */
@@ -123,16 +172,19 @@ var Data = (function () {
   function refreshWeather() {
     var now = Date.now();
     if (fetchingWeather || (now - weatherAt < 30 * 60000 && now >= weatherAt)) return;
+    if (Prefs.location() === 'auto' && !geo && fetchingGeo) return;   // the first time, wait to know where
     fetchingWeather = true;
-    var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + Place.lat + '&longitude=' + Place.lon
+    var h = here(), place = h.lat + ',' + h.lon;
+    var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + h.lat + '&longitude=' + h.lon
         + '&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset'
         + '&hourly=temperature_2m,weather_code,is_day&timezone=auto&forecast_days=2';
     get(url, {}, function (err, body) {
       fetchingWeather = false;
       if (err) return;
+      if (place !== placeKey()) { refreshWeather(); return; }   // the place changed while it was on its way
       weather = parseWeather(body);
       weatherAt = Date.now();
-      store('weather', {place: PLACE, body: body, at: weatherAt});
+      store('weather', {place: place, body: body, at: weatherAt});
       changed();
     });
   }
@@ -500,12 +552,16 @@ var Data = (function () {
 
   return {
     COINS: COINS,
-    city: Place.city,
+    get city() { return here().city; },
     currency: CURRENCY,
     onChange: function (fn) { listeners.push(fn); },
     setApps: function (apps) { installed = apps; },
     appFor: appFor,
-    refresh: function () { refreshWeather(); refreshPrices(); refreshRecs(); },
+    refresh: function () { refreshGeo(); refreshWeather(); refreshPrices(); refreshRecs(); },
+    /** The weather's place changed in Home Settings: look it up again now. */
+    locationChanged: function () { weather = null; weatherAt = 0; refreshGeo(true); refreshWeather(); changed(); },
+    /** Back on screen: maybe another Wi-Fi, so ask where again. */
+    reopened: function () { refreshGeo(true); },
     settingsChanged: function () { pricesAt = 0; refreshPrices(); changed(); },
     get weather() { return weather; },
     get weatherAt() { return weatherAt; },
