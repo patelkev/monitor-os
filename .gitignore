@@ -16,3 +16,8 @@ tools/.i18n-cache.json
 
 # Samsung remote-control pairing token (tools/m5/remote.mjs)
 .samsung-token
+
+# Signing material
+*.p12
+*.pfx
+*.pem
