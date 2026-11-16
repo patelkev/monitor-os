@@ -1,12 +1,13 @@
 // Sends remote-control key presses to the Samsung monitor over its network remote API (port 8002).
-// Usage: node tools/m5/remote.mjs KEY_1 KEY_2 ...
+// Usage: MONITOR_IP=<monitor-ip> node tools/m5/remote.mjs KEY_1 KEY_2 ...
 // The first run shows an "Allow" prompt on the monitor; the token it grants is saved in .samsung-token.
 import fs from 'node:fs';
 import path from 'node:path';
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; // the monitor uses a self-signed certificate
 
-const IP = process.env.MONITOR_IP || '<monitor-ip>';
+const IP = process.env.MONITOR_IP;
+if (!IP) { console.error('Set MONITOR_IP to the monitor\'s IP address, e.g. MONITOR_IP=<monitor-ip> node tools/m5/remote.mjs KEY_HOME'); process.exit(2); }
 const TOKEN_FILE = path.join(path.dirname(new URL(import.meta.url).pathname), '..', '..', '.samsung-token');
 const keys = process.argv.slice(2);
 const name = Buffer.from('monitor-os').toString('base64');
