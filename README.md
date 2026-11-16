@@ -1,3 +1,6 @@
+> **M5 Monitor fork of Free My TV:** see [MONITOR.md](MONITOR.md) for what changed and how to install it on a Samsung M5
+> Smart Monitor. Not affiliated with Samsung, Netflix or any other brand shown. The upstream README follows unchanged.
+
 <div align="center">
 
 <img src="docs/assets/icon-512.png" width="96" alt="">

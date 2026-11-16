@@ -1,10 +1,52 @@
-# Free My TV on a Samsung M5 Smart Monitor
+# monitor-os: a custom home screen for the Samsung M5 Smart Monitor
 
-This branch (`m5-monitor`) adapts Free My TV's Samsung (Tizen) web app to a **Samsung M5 Smart Monitor** and adds a
-set of home screen features on top. Everything below is what you need to pick the work up again: the device, the Mac
-setup, how to build and install, what was changed and where, how to test without the monitor, and what's still open.
+A custom home screen for the Samsung M5 Smart Monitor (Tizen 5.5), with wallpapers, a screensaver page, a List layout,
+a long-press menu and shortcuts for the monitor's inputs. This repository is <https://github.com/patelkev/monitor-os>,
+a fork of Free My TV; the work is on the `m5-monitor` branch (the default branch).
 
-The upstream README and `CLAUDE.md` still apply. This file only covers what's different on this branch.
+> **Not affiliated with Samsung, Netflix or any other brand shown.** All trademarks and logos belong to their
+> owners. This is an unofficial, personal project.
+
+## Credit
+
+Built on [Free My TV](https://github.com/simbasjungles/free-my-tv) by simbasjungles and contributors, released under
+the MIT licence. This fork keeps the upstream licence and copyright notice, and the upstream README and `CLAUDE.md`
+still apply. The rest of this file covers only what is different on this branch.
+
+## What was changed
+
+- Adapted the Samsung (Tizen) web app to the M5 monitor: monitor inputs (HDMI 1 and 2), no TV tuner.
+- Wallpapers, a screensaver page with a configurable photo interval, and a List layout.
+- A long-press menu, a light/dark button and a stronger focus ring.
+- Helper scripts in `tools/m5/`: preview without the monitor, wallpaper generator, remote-key sender.
+
+## Install with your own certificate
+
+Samsung requires apps to be signed. No certificate is included in this repository, so you make your own:
+
+1. Install Tizen Studio and turn on Developer mode on the monitor.
+2. Create your own author certificate and signing profile (`tools/m5/make-cert.sh` does this; you type the password
+   yourself).
+3. Build and install: `python3 tizen/install.py <monitor-ip>`.
+
+Keep your certificate and its password safe; updates must be signed with the same certificate. The detailed steps are
+further down in this file.
+
+## Third-party assets
+
+- Wallpapers: photographs from Unsplash, credited in `web/wallpapers/SOURCES.json`. They are licensed for use in an
+  app, not for redistribution as a standalone wallpaper collection.
+- Fonts: Geist, Manrope and Newsreader, under the SIL Open Font License (`web/typefaces/`).
+- Brand logos come from upstream Free My TV and remain the property of their owners.
+
+## Disclaimer
+
+Developer mode and sideloading are at your own risk. The software is provided as is, without warranty, under the MIT
+licence.
+
+## Privacy
+
+Do not post your monitor's serial number, MAC addresses, device IDs or Netflix ESN in issues or pull requests.
 
 ## The device
 
